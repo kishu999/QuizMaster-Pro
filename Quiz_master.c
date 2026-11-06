@@ -424,4 +424,71 @@ void view_leaderboard(void) {
     printf("==========================================================================\n");
 }
 
+int main() {
+    PlayerSession player;
+    QuizConfig config;
+    int choice;
+    srand((unsigned int)time(NULL));
 
+    printf("%s=========================================\n", COLOR_CYAN);
+    printf("        WELCOME TO QUIZMASTER PRO        \n");
+    printf("=========================================%s\n", COLOR_RESET);
+    printf("Enter your player name: ");
+    get_valid_string(player.player_name, MAX_NAME_LEN);
+
+    while (1) {
+        printf("\n%s--- MAIN MENU (Player: %s) ---%s\n", COLOR_YELLOW, player.player_name, COLOR_RESET);
+        printf("1. Start New Quiz\n");
+        printf("2. View Leaderboard\n");
+        printf("3. View Quiz History\n");
+        printf("4. Exit\n");
+        printf("Select an option (1-4): ");
+
+        choice = get_valid_int(1, 4);
+
+        if (choice == 1) {
+            configure_quiz(&config);
+            char api_url[256];
+            build_api_url(&config, api_url, sizeof(api_url));
+
+            char json_response[8192];
+            printf("%sFetching live questions from OpenTDB...%s\n", COLOR_CYAN, COLOR_RESET);
+
+            if (fetch_api_response(api_url, json_response, sizeof(json_response))) {
+                Question *questions = malloc(config.num_questions * sizeof(Question));
+                if (questions == NULL) {
+                    printf("[ERROR] Memory allocation failed!\n");
+                    continue;
+                }
+
+                if (parse_questions_from_json(json_response, questions, &config)) {
+                    play_quiz(&player, questions, config.num_questions);
+                    save_quiz_session(&player);
+                } else {
+                    printf("%s[WARNING] API response error! Switching to Offline Backup Mode...%s\n", COLOR_YELLOW, COLOR_RESET);
+                    Question backup_q[3];
+                    int count = load_fallback_questions(backup_q);
+                    play_quiz(&player, backup_q, count);
+                    save_quiz_session(&player);
+                }
+
+                free(questions);
+            } else {
+                printf("%s\n[WARNING] No internet connection! Switching to Offline Backup Mode...%s\n", COLOR_YELLOW, COLOR_RESET);
+                Question backup_q[3];
+                int count = load_fallback_questions(backup_q);
+                play_quiz(&player, backup_q, count);
+                save_quiz_session(&player);
+            }
+        } else if (choice == 2) {
+            view_leaderboard();
+        } else if (choice == 3) {
+            view_quiz_history();
+        } else if (choice == 4) {
+            printf("\n%sGoodbye, %s! Thanks for playing QuizMaster Pro.%s\n", COLOR_CYAN, player.player_name, COLOR_RESET);
+            break;
+        }
+    }
+
+    return 0;
+}
